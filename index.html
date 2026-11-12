@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoWalker - Simulador SIG 2.5D</title>
+    
+    <!-- Estilos CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+
+    <!-- Leaflet CSS y JS (CDN) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Phaser 3 (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+</head>
+<body>
+
+    <!-- Pantalla inicial de selección de ubicación con Leaflet -->
+    <div id="selector-container">
+        <div class="selector-header">
+            <div>
+                <h1>GeoWalker - Selecciona tu área de estudio (1km²)</h1>
+                <p style="font-size: 12px; color: #94a3b8;">Haz clic en cualquier parte del mapa o arrastra el marcador para elegir el origen de la simulación.</p>
+            </div>
+            <button id="start-btn">Iniciar Simulación GeoWalker</button>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <!-- Contenedor principal de la aplicación / juego Phaser -->
+    <div id="app"></div>
+
+    <!-- Script principal como Módulo ES6 -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
