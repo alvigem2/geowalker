@@ -8,50 +8,79 @@ export class PreloadScene extends Phaser.Scene {
         const width = this.scale.width;
         const height = this.scale.height;
         
-        const loadingText = this.add.text(width / 2, height / 2, 'Cargando texturas del entorno 2.5D...', {
+        const loadingText = this.add.text(width / 2, height / 2, 'Cargando assets del entorno 2.5D...', {
             fontFamily: 'monospace',
             fontSize: '14px',
             fill: '#38bdf8'
         }).setOrigin(0.5);
 
-        // Generar texturas procedurales internas de alta calidad (asfalto, ladrillo, pasto) 
-        // para que no dependas de archivos externos rotos y funcione al 100% de inmediato.
-        this.generateProceduralTextures();
-    }
+        // Cargar imágenes desde /assets/tiles/ y /assets/sprites/
+        // Usamos this.load.image() para cargar archivos PNG reales
+        // Con pixelArt: true en la config, las imágenes se renderizan nítidas (sin blur) al escalar
+        
+        // ── TILES DE TERRENO (suelos) ──
+        // Calles y asfalto
+        this.load.image('tex_asphalt', 'assets/tiles/terrain/asphalt.png');
+        this.load.image('tex_asphalt_sidebar', 'assets/tiles/terrain/asphalt_sidebar.png');
+        
+        // Césped / parques
+        this.load.image('tex_grass', 'assets/tiles/grass/grass_01.png');
+        this.load.image('tex_grass_02', 'assets/tiles/grass/grass_02.png');
+        this.load.image('tex_dirt', 'assets/tiles/terrain/dirt.png');
+        
+        // Agua (ríos, canales)
+        this.load.image('tex_water_river', 'assets/tiles/water/river_01.png');
+        this.load.image('tex_water_canal', 'assets/tiles/water/canal_01.png');
+        this.load.image('tex_water_pond', 'assets/tiles/water/pond_01.png');
+        
+        // Pavimento / aceras
+        this.load.image('tex_pavement', 'assets/tiles/terrain/pavement.png');
+        this.load.image('tex_pedestrian', 'assets/tiles/terrain/pedestrian.png');
 
-    generateProceduralTextures() {
-        const graphics = this.add.graphics();
+        // ── SPRITES DE EDIFICIOS (categorizados por familia OSM) ──
+        // Residencial (casas, apartamentos) - techos de teja, paredes con ventanas
+        this.load.image('spr_building_residential_1', 'assets/sprites/buildings/residential/house_01.png');
+        this.load.image('spr_building_residential_2', 'assets/sprites/buildings/residential/house_02.png');
+        this.load.image('spr_building_residential_3', 'assets/sprites/buildings/residential/apartment_01.png');
+        
+        // Comercial / Bancos / Oficinas - concreto, cristal, terrazas planas
+        this.load.image('spr_building_commercial_1', 'assets/sprites/buildings/commercial/office_01.png');
+        this.load.image('spr_building_commercial_2', 'assets/sprites/buildings/commercial/bank_01.png');
+        this.load.image('spr_building_commercial_3', 'assets/sprites/buildings/commercial/shop_01.png');
+        
+        // Gastronomía (restaurantes, cafés, pizzerías) - estilo cálido
+        this.load.image('spr_building_gastronomy_1', 'assets/sprites/buildings/gastronomy/restaurant_01.png');
+        this.load.image('spr_building_gastronomy_2', 'assets/sprites/buildings/gastronomy/cafe_01.png');
+        this.load.image('spr_building_gastronomy_3', 'assets/sprites/buildings/gastronomy/pizzeria_01.png');
+        
+        // Religioso / Iglesias - muros coloniales, terracota
+        this.load.image('spr_building_religious_1', 'assets/sprites/buildings/religious/church_01.png');
+        this.load.image('spr_building_religious_2', 'assets/sprites/buildings/religious/chapel_01.png');
 
-        // 1. Textura de Asfalto (para las calles)
-        graphics.fillStyle(0x1e293b, 1);
-        graphics.fillRect(0, 0, 32, 32);
-        // Pequeños puntos de ruido simulando grano de asfalto
-        graphics.fillStyle(0x0f172a, 0.5);
-        graphics.fillRect(4, 4, 2, 2);
-        graphics.fillRect(20, 15, 2, 2);
-        graphics.fillRect(10, 25, 2, 2);
-        graphics.generateTexture('tex_asphalt', 32, 32);
-        graphics.clear();
+        // ── ENTIDADES ──
+        // Jugador
+        this.load.image('spr_player', 'assets/sprites/player/player_01.png');
+        
+        // Vehículos (NPCs de tráfico)
+        this.load.image('spr_vehicle_car', 'assets/sprites/vehicles/car_01.png');
+        this.load.image('spr_vehicle_truck', 'assets/sprites/vehicles/truck_01.png');
+        
+        // Peatones
+        this.load.image('spr_pedestrian_1', 'assets/sprites/pedestrians/pedestrian_01.png');
+        this.load.image('spr_pedestrian_2', 'assets/sprites/pedestrians/pedestrian_02.png');
 
-        // 2. Textura de Ladrillo / Concreto (para edificios)
-        graphics.fillStyle(0x334155, 1);
-        graphics.fillRect(0, 0, 32, 32);
-        graphics.lineStyle(1, 0x475569, 1);
-        graphics.strokeRect(0, 0, 32, 16);
-        graphics.strokeRect(0, 16, 32, 16);
-        graphics.generateTexture('tex_building', 32, 32);
-        graphics.clear();
+        // ── UI ──
+        this.load.image('ui_compass_bg', 'assets/ui/compass_bg.png');
+        this.load.image('ui_compass_needle', 'assets/ui/compass_needle.png');
 
-        // 3. Textura de Pasto (para parques)
-        graphics.fillStyle(0x166534, 1);
-        graphics.fillRect(0, 0, 32, 32);
-        graphics.fillStyle(0x22c55e, 0.4);
-        graphics.fillCircle(8, 8, 3);
-        graphics.fillCircle(24, 20, 3);
-        graphics.generateTexture('tex_grass', 32, 32);
-        graphics.clear();
+        // Fallback: si faltan archivos, generamos texturas procedurales como respaldo
+        this.load.on('loaderror', (file) => {
+            console.warn(`Asset no encontrado: ${file.key} (${file.url}) - usando fallback procedural`);
+        });
 
-        // Una vez creadas las texturas, saltamos directamente a nuestra GameScene
-        this.scene.start('GameScene', this.game.initialOSMData);
+        // Al terminar la carga, iniciamos GameScene
+        this.load.once('complete', () => {
+            this.scene.start('GameScene', this.game.initialOSMData);
+        });
     }
 }
