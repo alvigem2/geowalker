@@ -593,38 +593,41 @@ export class GameScene extends Phaser.Scene {
         ]);
     }
     
+    getAreaBounds() {
+        const metersPerDegreeLat = 111320;
+        const dLatDeg = 500 / metersPerDegreeLat;
+        const dLonDeg = 500 / (metersPerDegreeLat * Math.cos(this.originLat * Math.PI / 180));
+
+        return {
+            north: this.originLat + dLatDeg,
+            south: this.originLat - dLatDeg,
+            east: this.originLon + dLonDeg,
+            west: this.originLon - dLonDeg
+        };
+    }
+
     async copyCoordinates() {
         if (!this.player) return;
 
-        const isoX = this.player.x - this.scale.width / 2;
-        const isoY = this.player.y - this.scale.height / 2;
-        const px = isoX / 2 + isoY;
-        const py = isoY - isoX / 2;
+        // Esquinas del cuadrado 1km² en grados sexagesimales (DMS)
+        // Tabla TSV (separada por tabulaciones) lista para pegar en Excel y transferir a ArcGIS:
+        // Punto | Coordenada X (Longitud) | Coordenada Y (Latitud)
+        const bounds = this.getAreaBounds();
+        const corners = [
+            { name: '1 (Noreste)', lat: bounds.north, lon: bounds.east },
+            { name: '2 (Noroeste)', lat: bounds.north, lon: bounds.west },
+            { name: '3 (Sureste)', lat: bounds.south, lon: bounds.east },
+            { name: '4 (Suroeste)', lat: bounds.south, lon: bounds.west }
+        ];
 
-        const metersX = px / 4;
-        const metersY = -py / 4;
+        const rows = ['PUNTO\tCOORDENADA X (LONGITUD)\tCOORDENADA Y (LATITUD)'];
+        corners.forEach(c => {
+            const xDMS = decimalToDMS(c.lon, false); // X = Longitud
+            const yDMS = decimalToDMS(c.lat, true);  // Y = Latitud
+            rows.push(c.name + '\t' + xDMS + '\t' + yDMS);
+        });
 
-        const dLat = metersY / 6378137;
-        const dLon = metersX / (6378137 * Math.cos(this.originLat * Math.PI / 180));
-
-        const currentLat = this.originLat + (dLat * (180 / Math.PI));
-        const currentLon = this.originLon + (dLon * (180 / Math.PI));
-        const utm = computeUTM(currentLat, currentLon);
-        const latDMS = decimalToDMS(currentLat, true);
-        const lonDMS = decimalToDMS(currentLon, false);
-
-        const textToCopy = [
-            `=== GeoWalker - Coordenadas Actuales ===`,
-            `Latitud/Longitud: ${currentLat.toFixed(6)}°, ${currentLon.toFixed(6)}°`,
-            `DMS: ${latDMS}, ${lonDMS}`,
-            `UTM Zone: ${utm.zone}`,
-            `Easting: ${utm.easting} mE`,
-            `Northing: ${utm.northing} mN`,
-            `Distancia recorrida: ${Math.round(this.totalDistanceMeters)} m`,
-            `Área de simulación: 1km² (500m radio)`,
-            `Origen: ${this.originLat.toFixed(6)}°, ${this.originLon.toFixed(6)}°`,
-            `Fecha: ${new Date().toLocaleString()}`
-        ].join('\n');
+        const textToCopy = rows.join('\n');
 
         try {
             await navigator.clipboard.writeText(textToCopy);
@@ -844,8 +847,8 @@ export class GameScene extends Phaser.Scene {
             doc.text(line, 20, 68 + i * 7);
         });
         
-        // Insertar el mapa real (vista top-down) en el PDF
-        doc.addImage(mapImage, 'PNG', 15, 75, 267, 120);
+        // Insertar el mapa real (vista top-down) en el PDF - formato cuadrado 1:1
+        doc.addImage(mapImage, 'PNG', 98.5, 95, 100, 100);
 
         // Segunda página: Estadísticas OSM + Límites geográficos
         doc.addPage();
@@ -895,16 +898,7 @@ export class GameScene extends Phaser.Scene {
         doc.setFont('helvetica', 'bold');
         doc.text('LÍMITES GEOGRÁFICOS DEL ÁREA (1km²)', 20, 100);
         
-        const metersPerDegreeLat = 111320;
-        const dLatDeg = 500 / metersPerDegreeLat;
-        const dLonDeg = 500 / (metersPerDegreeLat * Math.cos(this.originLat * Math.PI / 180));
-        
-        const bounds = {
-            north: this.originLat + dLatDeg,
-            south: this.originLat - dLatDeg,
-            east: this.originLon + dLonDeg,
-            west: this.originLon - dLonDeg
-        };
+        const bounds = this.getAreaBounds();
         
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(11);
@@ -949,10 +943,10 @@ export class GameScene extends Phaser.Scene {
         // Mapa real (vista top-down) a la derecha
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(56, 189, 248);
-        doc.text('MAPA DEL AREA (VISTA PLANA)', 150, 115);
+        doc.text('MAPA DEL AREA (VISTA PLANA)', 213.5, 115, { align: 'center' });
 
-        // Usar la imagen generada como referencia visual pequeña
-        doc.addImage(mapImage, 'PNG', 150, 125, 140, 70);
+        // Usar la imagen generada como referencia visual pequeña (cuadrada 1:1)
+        doc.addImage(mapImage, 'PNG', 178.5, 125, 70, 70);
         
         // Pie de página
         const pageCount = doc.getNumberOfPages();
