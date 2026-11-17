@@ -571,9 +571,170 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    generateMapImage() {
+        const canvas = document.createElement('canvas');
+        const mapSize = 800;
+        canvas.width = mapSize;
+        canvas.height = mapSize;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = '#1a2f1a';
+        ctx.fillRect(0, 0, mapSize, mapSize);
+
+        const scale = mapSize / 1000;
+
+        const latLonToCanvas = (lat, lon) => {
+            const m = wgs84ToMeters(lat, lon, this.originLat, this.originLon);
+            return {
+                x: mapSize / 2 + m.x * scale,
+                y: mapSize / 2 - m.y * scale
+            };
+        };
+
+        const nodesMap = new Map();
+        if (this.osmData && this.osmData.elements) {
+            this.osmData.elements.forEach(el => {
+                if (el.type === 'node') {
+                    nodesMap.set(el.id, { lat: el.lat, lon: el.lon, tags: el.tags });
+                }
+            });
+        }
+
+        const areasToDraw = [];
+        const linesToDraw = [];
+
+        if (this.osmData && this.osmData.elements) {
+            this.osmData.elements.forEach(el => {
+                if (el.type !== 'way' || !el.nodes || !el.tags) return;
+                const tags = el.tags;
+                const canvasPoints = [];
+                for (const nodeId of el.nodes) {
+                    const node = nodesMap.get(nodeId);
+                    if (node) canvasPoints.push(latLonToCanvas(node.lat, node.lon));
+                }
+                if (canvasPoints.length < 2) return;
+
+                const isPark = tags.leisure === 'park' || tags.landuse === 'grass';
+                const isWater = tags.waterway || tags.natural === 'water';
+                const isBuilding = !!tags.building;
+                const isHighway = !!tags.highway;
+
+                if (canvasPoints.length >= 3 && (isPark || isWater || isBuilding)) {
+                    let fillColor = '#9ca3af';
+                    if (isWater) fillColor = '#3b82f6';
+                    else if (isPark) fillColor = '#22c55e';
+                    else if (isBuilding) {
+                        if (tags.amenity === 'place_of_worship' || tags.building === 'church') fillColor = '#d97706';
+                        else if (tags.amenity === 'bank') fillColor = '#1e40af';
+                        else if (tags.amenity === 'restaurant' || tags.amenity === 'cafe' || tags.amenity === 'fast_food') fillColor = '#dc2626';
+                    }
+                    areasToDraw.push({ points: canvasPoints, fillColor, isBuilding });
+                }
+
+                if (isHighway) {
+                    const width = (tags.highway === 'motorway' || tags.highway === 'trunk') ? 5 : 3;
+                    linesToDraw.push({ points: canvasPoints, width });
+                }
+            });
+        }
+
+        // Dibujar áreas
+        areasToDraw.forEach(area => {
+            ctx.beginPath();
+            ctx.moveTo(area.points[0].x, area.points[0].y);
+            for (let i = 1; i < area.points.length; i++) {
+                ctx.lineTo(area.points[i].x, area.points[i].y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = area.fillColor;
+            ctx.fill();
+            if (area.isBuilding) {
+                ctx.strokeStyle = '#4b5563';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        });
+
+        // Dibujar vías
+        linesToDraw.forEach(line => {
+            ctx.beginPath();
+            ctx.moveTo(line.points[0].x, line.points[0].y);
+            for (let i = 1; i < line.points.length; i++) {
+                ctx.lineTo(line.points[i].x, line.points[i].y);
+            }
+            ctx.strokeStyle = '#374151';
+            ctx.lineWidth = line.width;
+            ctx.stroke();
+            ctx.strokeStyle = '#9ca3af';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+
+        // Cuadrícula GIS cada 100m
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 1;
+        const gridStep = 100 * scale;
+        for (let x = mapSize / 2; x < mapSize; x += gridStep) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, mapSize); ctx.stroke();
+        }
+        for (let x = mapSize / 2; x > 0; x -= gridStep) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, mapSize); ctx.stroke();
+        }
+        for (let y = mapSize / 2; y < mapSize; y += gridStep) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(mapSize, y); ctx.stroke();
+        }
+        for (let y = mapSize / 2; y > 0; y -= gridStep) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(mapSize, y); ctx.stroke();
+        }
+
+        // Origen centro
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(mapSize / 2, mapSize / 2, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('ORIGEN', mapSize / 2, mapSize / 2 - 12);
+
+        // Escala gráfica
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'left';
+        const barX = 20, barY = mapSize - 40, barW = 200 * scale;
+        ctx.fillRect(barX, barY, barW, 6);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barW, 6);
+        ctx.fillText('0', barX, barY + 18);
+        ctx.fillText('200m', barX + barW - 20, barY + 18);
+        ctx.fillText('Escala gráfica - 1km²', barX, barY - 6);
+
+        // Norte
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText('N ^', mapSize - 20, 30);
+
+        // Título
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText('PLANO GIS - GeoWalker 1km²', 20, 30);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '10px monospace';
+        ctx.fillText(`Centro: ${this.originLat.toFixed(5)} ${this.originLon.toFixed(5)}`, 20, 48);
+
+        return canvas.toDataURL('image/png');
+    }
+
     downloadAreaPDF() {
         if (!this.player || !this.osmData) return;
         const { jsPDF } = window.jspdf;
+        const mapImage = this.generateMapImage();
         const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
         doc.setFont('helvetica');
         doc.setFillColor(15, 23, 42);
@@ -610,6 +771,14 @@ export class GameScene extends Phaser.Scene {
             doc.text(line, 20, 68 + i * 7);
         });
         
+        // Insertar el mapa real (vista top-down) en el PDF
+        doc.addImage(mapImage, 'PNG', 15, 75, 267, 120);
+
+        // Segunda página: Estadísticas OSM + Límites geográficos
+        doc.addPage();
+        doc.setFillColor(15, 23, 42);
+        doc.rect(0, 0, 297, 210, 'F');
+
         // Estadísticas OSM
         const stats = { buildings: 0, roads: 0, parks: 0, water: 0, pois: 0, trees: 0 };
         if (this.osmData && this.osmData.elements) {
@@ -624,13 +793,15 @@ export class GameScene extends Phaser.Scene {
                 }
             });
         }
-        
+
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(56, 189, 248);
-        doc.text('ESTADÍSTICAS DE DATOS OSM', 20, 130);
-        
+        doc.setFontSize(18);
+        doc.text('ESTADÍSTICAS DE DATOS OSM', 20, 25);
+
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(203, 213, 225);
+        doc.setFontSize(11);
         const statsLines = [
             `Edificios: ${stats.buildings}`,
             `Vías/Carreteras: ${stats.roads}`,
@@ -640,19 +811,16 @@ export class GameScene extends Phaser.Scene {
             `Árboles: ${stats.trees}`,
             `Total elementos OSM: ${this.osmData.elements.length}`
         ];
-        
+
         statsLines.forEach((line, i) => {
-            doc.text(line, 20, 140 + i * 7);
+            doc.text(line, 20, 40 + i * 7);
         });
-        
-        // Segunda página: Límites geográficos
-        doc.addPage();
-        doc.setFillColor(15, 23, 42);
-        doc.rect(0, 0, 297, 210, 'F');
+
+        // Límites geográficos
         doc.setTextColor(56, 189, 248);
         doc.setFontSize(18);
         doc.setFont('helvetica', 'bold');
-        doc.text('LÍMITES GEOGRÁFICOS DEL ÁREA (1km²)', 20, 25);
+        doc.text('LÍMITES GEOGRÁFICOS DEL ÁREA (1km²)', 20, 100);
         
         const metersPerDegreeLat = 111320;
         const dLatDeg = 500 / metersPerDegreeLat;
@@ -681,12 +849,12 @@ export class GameScene extends Phaser.Scene {
         ];
         
         boundsInfo.forEach((line, i) => {
-            doc.text(line, 20, 40 + i * 8);
+            doc.text(line, 20, 115 + i * 6);
         });
         
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(56, 189, 248);
-        doc.text('ESQUINAS DEL RECTÁNGULO DE SIMULACIÓN', 20, 120);
+        doc.text('ESQUINAS DEL RECTÁNGULO DE SIMULACIÓN', 20, 170);
         
         const corners = [
             { name: 'Noreste (NE)', lat: bounds.north, lon: bounds.east },
@@ -701,34 +869,17 @@ export class GameScene extends Phaser.Scene {
             const utmCorner = computeUTM(corner.lat, corner.lon);
             doc.text(
                 `${corner.name}: ${corner.lat.toFixed(6)}°, ${corner.lon.toFixed(6)}° | UTM: ${utmCorner.easting}mE, ${utmCorner.northing}mN`,
-                20, 132 + i * 8
+                20, 182 + i * 7
             );
         });
         
-        // Mini mapa esquemático
+        // Mapa real (vista top-down) a la derecha
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(56, 189, 248);
-        doc.text('REPRESENTACIÓN ESQUEMÁTICA', 150, 40);
-        
-        doc.setFont('courier', 'normal');
-        doc.setFontSize(7);
-        doc.setTextColor(148, 163, 184);
-        const asciiMap = [
-            '     N (Norte)',
-            '     ▲',
-            '     │',
-            '  ┌──┼──┐',
-            '  │  │  │  ← 500m',
-            'W │  ●  │ E  (● = Origen)',
-            '  │  │  │',
-            '  └──┼──┘',
-            '     │',
-            '     ▼',
-            '     S (Sur)'
-        ];
-        asciiMap.forEach((line, i) => {
-            doc.text(line, 150, 50 + i * 5);
-        });
+        doc.text('MAPA DEL AREA (VISTA PLANA)', 150, 115);
+
+        // Usar la imagen generada como referencia visual pequeña
+        doc.addImage(mapImage, 'PNG', 150, 125, 140, 70);
         
         // Pie de página
         const pageCount = doc.getNumberOfPages();
