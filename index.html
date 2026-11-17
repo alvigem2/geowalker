@@ -22,10 +22,15 @@
         <div class="selector-header">
             <div>
                 <h1>GeoWalker - Selecciona tu área de estudio (1km²)</h1>
-                <p style="font-size: 12px; color: #94a3b8;">Haz clic en cualquier parte del mapa o arrastra el marcador para elegir el origen de la simulación.</p>
+                <p style="font-size: 12px; color: #94a3b8;">Haz clic en cualquier parte del mapa o arrastra el marcador para elegir el origen de la simulación. El rectángulo azul muestra el área de 1km² que se virtualizará.</p>
+            </div>
+            <div class="search-container">
+                <input type="text" id="location-search" placeholder="Buscar lugar (ej. Madrid, España)..." />
+                <button id="search-btn">Buscar</button>
             </div>
             <button id="start-btn">Iniciar Simulación GeoWalker</button>
         </div>
+        <div id="area-info" class="area-info-panel"></div>
         <div id="map"></div>
     </div>
 

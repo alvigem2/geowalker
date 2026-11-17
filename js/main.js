@@ -59,15 +59,106 @@ function initLeafletSelector() {
 
     selectedMarker = L.marker([selectedLat, selectedLon], { draggable: true }).addTo(leafletMap);
 
+    // Rectángulo visual del área de simulación (1km² = 500m a cada lado)
+    let simAreaRectangle = null;
+
+    function updateSimArea() {
+        // Calcular las coordenadas del rectángulo de 1km² (500m a cada lado)
+        // 1 grado de latitud ≈ 111,320 metros
+        const metersPerDegreeLat = 111320;
+        const dLat = 500 / metersPerDegreeLat;
+        const dLon = 500 / (metersPerDegreeLat * Math.cos(selectedLat * Math.PI / 180));
+
+        const bounds = [
+            [selectedLat - dLat, selectedLon - dLon], // Esquina suroeste
+            [selectedLat + dLat, selectedLon + dLon]  // Esquina noreste
+        ];
+
+        if (simAreaRectangle) {
+            simAreaRectangle.setBounds(bounds);
+        } else {
+            simAreaRectangle = L.rectangle(bounds, {
+                color: '#38bdf8',
+                weight: 2,
+                fillColor: '#38bdf8',
+                fillOpacity: 0.1,
+                dashArray: '5, 5'
+            }).addTo(leafletMap);
+        }
+
+        // Actualizar información del área
+        const areaInfo = document.getElementById('area-info');
+        if (areaInfo) {
+            areaInfo.innerHTML = `
+                <strong>Área de Simulación (1km²)</strong><br>
+                Centro: ${selectedLat.toFixed(5)}°, ${selectedLon.toFixed(5)}°<br>
+                Radio: 500m desde el centro<br>
+                Límite: ±500m en Lat/Lon
+            `;
+        }
+    }
+
+    updateSimArea();
+
     selectedMarker.on('dragend', (event) => {
         const pos = event.target.getLatLng();
         selectedLat = pos.lat;
         selectedLon = pos.lng;
+        updateSimArea();
     });
 
     leafletMap.on('click', (event) => {
         selectedLat = event.latlng.lat;
         selectedLon = event.latlng.lng;
         selectedMarker.setLatLng([selectedLat, selectedLon]);
+        updateSimArea();
+    });
+
+    // Buscador de lugares
+    const searchInput = document.getElementById('location-search');
+    const searchBtn = document.getElementById('search-btn');
+
+    async function searchLocation() {
+        const query = searchInput.value.trim();
+        if (!query) return;
+
+        try {
+            // Usar Nominatim API de OpenStreetMap para geocodificación
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`
+            );
+            const data = await response.json();
+
+            if (data && data.length > 0) {
+                const result = data[0];
+                selectedLat = parseFloat(result.lat);
+                selectedLon = parseFloat(result.lon);
+
+                // Mover mapa y marcador
+                leafletMap.setView([selectedLat, selectedLon], 15);
+                selectedMarker.setLatLng([selectedLat, selectedLon]);
+                updateSimArea();
+
+                // Mostrar nombre del lugar encontrado
+                const areaInfo = document.getElementById('area-info');
+                if (areaInfo) {
+                    areaInfo.innerHTML = `
+                        <strong>📍 ${result.display_name}</strong><br>
+                        Lat: ${selectedLat.toFixed(5)}° | Lon: ${selectedLon.toFixed(5)}°<br>
+                        Área de simulación: 1km² (500m radio)
+                    `;
+                }
+            } else {
+                alert('Lugar no encontrado. Intenta con otra búsqueda.');
+            }
+        } catch (error) {
+            console.error('Error en búsqueda:', error);
+            alert('Error al buscar el lugar. Verifica tu conexión.');
+        }
+    }
+
+    searchBtn.addEventListener('click', searchLocation);
+    searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') searchLocation();
     });
 }

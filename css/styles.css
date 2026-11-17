@@ -66,6 +66,66 @@ body, html {
     background: #0369a1;
 }
 
+.selector-header button:hover {
+    background: #0369a1;
+}
+
 .hidden {
     display: none !important;
+}
+
+/* Panel de información del área de simulación */
+.area-info-panel {
+    position: absolute;
+    top: 80px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 12px 18px;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 12px;
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    border: 1px solid #334155;
+    white-space: nowrap;
+}
+
+/* Buscador */
+.search-container {
+    margin-top: 15px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.search-container input {
+    background: #1e293b;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    width: 200px;
+    transition: width 0.3s;
+}
+
+.search-container input:focus {
+    width: 250px;
+    outline: none;
+    border-color: #38bdf8;
+}
+
+.search-container button {
+    background: #0284c7;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.search-container button:hover {
+    background: #0369a1;
 }

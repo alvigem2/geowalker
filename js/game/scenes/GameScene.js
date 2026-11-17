@@ -271,22 +271,55 @@ export class GameScene extends Phaser.Scene {
     }
 
     spawnTrafficAgents() {
+        this.spawnVehicles();
+        this.spawnPedestrians();
+    }
+
+    spawnVehicles() {
         if (this.vehicleRoads.length === 0) return;
 
-        for (let i = 0; i < 50; i++) {
+        for (let i = 0; i < 30; i++) {
             const randomRoad = this.vehicleRoads[Math.floor(Math.random() * this.vehicleRoads.length)];
             if (!randomRoad || randomRoad.length === 0) continue;
             
             const startPoint = randomRoad[0];
-            const npcSprite = this.add.rectangle(startPoint.x, startPoint.y, 12, 18, 0xef4444);
+            // Usar sprite de vehículo real (car o truck aleatorio)
+            const vehicleType = Math.random() < 0.7 ? 'spr_vehicle_car' : 'spr_vehicle_truck';
+            const npcSprite = this.add.image(startPoint.x, startPoint.y, vehicleType);
             npcSprite.setOrigin(0.5, 0.8);
-            npcSprite.setStrokeStyle(1, 0x0f172a);
+            npcSprite.setScale(0.5); // Ajustar escala según tus sprites
 
             this.npcs.push({
                 sprite: npcSprite,
                 road: randomRoad,
                 currentIndex: 0,
-                speed: 50 + Math.random() * 20
+                speed: 60 + Math.random() * 30,
+                type: 'vehicle'
+            });
+        }
+    }
+
+    spawnPedestrians() {
+        // Peatones usan TODAS las vías (roadsNetwork incluye peatonales, footway, path, etc.)
+        if (this.roadsNetwork.length === 0) return;
+
+        for (let i = 0; i < 560; i++) {
+            const randomRoad = this.roadsNetwork[Math.floor(Math.random() * this.roadsNetwork.length)];
+            if (!randomRoad || randomRoad.length === 0) continue;
+            
+            const startPoint = randomRoad[0];
+            // Usar sprite de peatón real
+            const pedType = Math.random() < 0.5 ? 'spr_pedestrian_1' : 'spr_pedestrian_2';
+            const npcSprite = this.add.image(startPoint.x, startPoint.y, pedType);
+            npcSprite.setOrigin(0.5, 0.8);
+            npcSprite.setScale(0.5); // Ajustar escala según tus sprites
+
+            this.npcs.push({
+                sprite: npcSprite,
+                road: randomRoad,
+                currentIndex: 0,
+                speed: 25 + Math.random() * 15, // Más lento que vehículos
+                type: 'pedestrian'
             });
         }
     }
@@ -306,6 +339,8 @@ export class GameScene extends Phaser.Scene {
             if (dist < 5) {
                 npc.currentIndex++;
             } else {
+                // Peatones se mueven más lento y con dirección más "enfocada"
+                // Vehículos pueden tener velocidad variable
                 npc.sprite.x += (dx / dist) * npc.speed * deltaSec;
                 npc.sprite.y += (dy / dist) * npc.speed * deltaSec;
             }
