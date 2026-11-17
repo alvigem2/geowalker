@@ -1,5 +1,5 @@
 import { fetchOSMData } from './gis/overpass.js';
-import { GameScene } from './game/scenes/GameScene.js';
+import { GameScene } from './game/scenes/GameScene.js?v=20261116';
 
 let selectedLat = -17.7833;
 let selectedLon = -63.1821;

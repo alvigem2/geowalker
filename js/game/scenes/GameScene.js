@@ -648,161 +648,226 @@ export class GameScene extends Phaser.Scene {
     }
 
     generateMapImage() {
+        // ── Plano SIG profesional (fondo papel, marco, graticulado, leyenda) ──
+        const M = 56;                 // margen del marco cartográfico
+        const mapSize = 800;            // lienzo total
+        const plotSize = mapSize - 2 * M; // 688 px de área de mapa = 1000 m
+        const scale = plotSize / 1000;  // px por metro
+
         const canvas = document.createElement('canvas');
-        const mapSize = 800;
         canvas.width = mapSize;
         canvas.height = mapSize;
         const ctx = canvas.getContext('2d');
 
-        ctx.fillStyle = '#1a2f1a';
-        ctx.fillRect(0, 0, mapSize, mapSize);
-
-        const scale = mapSize / 1000;
-
-        const latLonToCanvas = (lat, lon) => {
+        const toXY = (lat, lon) => {
             const m = wgs84ToMeters(lat, lon, this.originLat, this.originLon);
             return {
-                x: mapSize / 2 + m.x * scale,
-                y: mapSize / 2 - m.y * scale
+                x: M + plotSize / 2 + m.x * scale,
+                y: M + plotSize / 2 - m.y * scale
             };
         };
+
+        const tracePath = (pts) => {
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        };
+
+        // ── Fondo papel ──
+        ctx.fillStyle = '#fbfaf5';
+        ctx.fillRect(0, 0, mapSize, mapSize);
+        ctx.fillStyle = '#f0efe6';
+        ctx.fillRect(M, M, plotSize, plotSize);
 
         const nodesMap = new Map();
         if (this.osmData && this.osmData.elements) {
             this.osmData.elements.forEach(el => {
-                if (el.type === 'node') {
-                    nodesMap.set(el.id, { lat: el.lat, lon: el.lon, tags: el.tags });
-                }
+                if (el.type === 'node') nodesMap.set(el.id, { lat: el.lat, lon: el.lon, tags: el.tags });
             });
         }
 
-        const areasToDraw = [];
-        const linesToDraw = [];
-
+        const areas = [];   // {points, fill, stroke, isBuilding}
+        const roads = [];   // {points, width}
         if (this.osmData && this.osmData.elements) {
             this.osmData.elements.forEach(el => {
                 if (el.type !== 'way' || !el.nodes || !el.tags) return;
                 const tags = el.tags;
-                const canvasPoints = [];
+                const pts = [];
                 for (const nodeId of el.nodes) {
-                    const node = nodesMap.get(nodeId);
-                    if (node) canvasPoints.push(latLonToCanvas(node.lat, node.lon));
+                    const n = nodesMap.get(nodeId);
+                    if (n) pts.push(toXY(n.lat, n.lon));
                 }
-                if (canvasPoints.length < 2) return;
+                if (pts.length < 2) return;
 
-                const isPark = tags.leisure === 'park' || tags.landuse === 'grass';
-                const isWater = tags.waterway || tags.natural === 'water';
+                const isPark = tags.leisure === 'park' || tags.leisure === 'garden' || tags.landuse === 'grass' || tags.landuse === 'forest' || tags.landuse === 'cemetery';
+                const isWater = tags.natural === 'water' || tags.waterway || tags.landuse === 'reservoir' || tags.leisure === 'swimming_pool';
                 const isBuilding = !!tags.building;
                 const isHighway = !!tags.highway;
 
-                if (canvasPoints.length >= 3 && (isPark || isWater || isBuilding)) {
-                    let fillColor = '#9ca3af';
-                    if (isWater) fillColor = '#3b82f6';
-                    else if (isPark) fillColor = '#22c55e';
+                if (pts.length >= 3 && (isPark || isWater || isBuilding)) {
+                    let fill = '#f5f5f0', stroke = '#6b7280';
+                    if (isWater)      { fill = '#bfdbfe'; stroke = '#3b82f6'; }
+                    else if (isPark)  { fill = '#bbf7d0'; stroke = '#15803d'; }
                     else if (isBuilding) {
-                        if (tags.amenity === 'place_of_worship' || tags.building === 'church') fillColor = '#d97706';
-                        else if (tags.amenity === 'bank') fillColor = '#1e40af';
-                        else if (tags.amenity === 'restaurant' || tags.amenity === 'cafe' || tags.amenity === 'fast_food') fillColor = '#dc2626';
+                        if (tags.amenity === 'place_of_worship' || tags.building === 'church') { fill = '#fef3c7'; stroke = '#b45309'; }
+                        else if (tags.amenity === 'bank') { fill = '#dbeafe'; stroke = '#1e40af'; }
+                        else if (tags.amenity === 'restaurant' || tags.amenity === 'cafe' || tags.amenity === 'fast_food' || tags.amenity === 'bar') { fill = '#fee2e2'; stroke = '#b91c1c'; }
+                        else if (tags.amenity === 'school' || tags.amenity === 'university' || tags.amenity === 'library') { fill = '#e0e7ff'; stroke = '#4338ca'; }
+                        else if (tags.amenity === 'hospital' || tags.amenity === 'clinic' || tags.amenity === 'doctors') { fill = '#fce7f3'; stroke = '#be185d'; }
+                        else if (tags.amenity === 'fuel') { fill = '#fef9c3'; stroke = '#a16207'; }
+                        else if (tags.shop === 'supermarket' || tags.shop === 'mall') { fill = '#ccfbf1'; stroke = '#0f766e'; }
                     }
-                    areasToDraw.push({ points: canvasPoints, fillColor, isBuilding });
+                    areas.push({ points: pts, fill, stroke, isBuilding });
                 }
 
                 if (isHighway) {
-                    const width = (tags.highway === 'motorway' || tags.highway === 'trunk') ? 5 : 3;
-                    linesToDraw.push({ points: canvasPoints, width });
+                    const w = (tags.highway === 'motorway' || tags.highway === 'trunk' || tags.highway === 'primary') ? 7
+                            : (tags.highway === 'secondary' || tags.highway === 'tertiary') ? 5 : 3;
+                    roads.push({ points: pts, width: w });
                 }
             });
         }
 
-        // Dibujar áreas
-        areasToDraw.forEach(area => {
-            ctx.beginPath();
-            ctx.moveTo(area.points[0].x, area.points[0].y);
-            for (let i = 1; i < area.points.length; i++) {
-                ctx.lineTo(area.points[i].x, area.points[i].y);
-            }
+        // ── Áreas (parques, agua, edificios) ──
+        areas.forEach(a => {
+            tracePath(a.points);
             ctx.closePath();
-            ctx.fillStyle = area.fillColor;
+            ctx.fillStyle = a.fill;
             ctx.fill();
-            if (area.isBuilding) {
-                ctx.strokeStyle = '#4b5563';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-            }
-        });
-
-        // Dibujar vías
-        linesToDraw.forEach(line => {
-            ctx.beginPath();
-            ctx.moveTo(line.points[0].x, line.points[0].y);
-            for (let i = 1; i < line.points.length; i++) {
-                ctx.lineTo(line.points[i].x, line.points[i].y);
-            }
-            ctx.strokeStyle = '#374151';
-            ctx.lineWidth = line.width;
-            ctx.stroke();
-            ctx.strokeStyle = '#9ca3af';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = a.stroke;
+            ctx.lineWidth = a.isBuilding ? 1 : 1.5;
             ctx.stroke();
         });
 
-        // Cuadrícula GIS cada 100m
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        // ── Vías: casing oscuro + relleno claro ──
+        roads.forEach(r => {
+            tracePath(r.points);
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = r.width + 2;
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+            tracePath(r.points);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = r.width;
+            ctx.stroke();
+        });
+
+        // ── Graticulado cada 100 m con etiquetas de coordenadas ──
+        ctx.strokeStyle = 'rgba(100, 116, 139, 0.30)';
         ctx.lineWidth = 1;
-        const gridStep = 100 * scale;
-        for (let x = mapSize / 2; x < mapSize; x += gridStep) {
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, mapSize); ctx.stroke();
-        }
-        for (let x = mapSize / 2; x > 0; x -= gridStep) {
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, mapSize); ctx.stroke();
-        }
-        for (let y = mapSize / 2; y < mapSize; y += gridStep) {
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(mapSize, y); ctx.stroke();
-        }
-        for (let y = mapSize / 2; y > 0; y -= gridStep) {
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(mapSize, y); ctx.stroke();
+        ctx.font = '9px monospace';
+        ctx.fillStyle = '#475569';
+        const metersPerDegLat = 111320;
+        const metersPerDegLon = 111320 * Math.cos(this.originLat * Math.PI / 180);
+        ctx.textAlign = 'center';
+        for (let d = -500; d <= 500; d += 100) {
+            const gx = M + plotSize / 2 + d * scale;
+            if (gx > M && gx < M + plotSize) {
+                ctx.beginPath(); ctx.moveTo(gx, M); ctx.lineTo(gx, M + plotSize); ctx.stroke();
+                const lonD = this.originLon + d / metersPerDegLon;
+                ctx.fillText(Math.abs(lonD).toFixed(4) + (lonD >= 0 ? 'E' : 'O'), gx, M + plotSize + 14);
+            }
+            const gy = M + plotSize / 2 - d * scale;
+            if (gy > M && gy < M + plotSize) {
+                ctx.beginPath(); ctx.moveTo(M, gy); ctx.lineTo(M + plotSize, gy); ctx.stroke();
+                const latD = this.originLat + d / metersPerDegLat;
+                ctx.fillText(Math.abs(latD).toFixed(4) + (latD >= 0 ? 'N' : 'S'), M - 8, gy + 3);
+            }
         }
 
-        // Origen centro
-        ctx.fillStyle = '#ef4444';
-        ctx.beginPath();
-        ctx.arc(mapSize / 2, mapSize / 2, 6, 0, Math.PI * 2);
-        ctx.fill();
+        // ── Origen (centro) ──
+        const oc = toXY(this.originLat, this.originLon);
+        ctx.fillStyle = '#dc2626';
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(oc.x, oc.y, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = '#dc2626';
+        ctx.beginPath();
+        ctx.moveTo(oc.x - 16, oc.y); ctx.lineTo(oc.x + 16, oc.y);
+        ctx.moveTo(oc.x, oc.y - 16); ctx.lineTo(oc.x, oc.y + 16);
         ctx.stroke();
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 14px monospace';
+        ctx.fillStyle = '#dc2626';
+        ctx.font = 'bold 11px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('ORIGEN', mapSize / 2, mapSize / 2 - 12);
+        ctx.fillText('ORIGEN', oc.x, oc.y - 14);
 
-        // Escala gráfica
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '11px monospace';
+        // ── Marco cartográfico doble ──
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(M - 2, M - 2, plotSize + 4, plotSize + 4);
+        ctx.lineWidth = 0.75;
+        ctx.strokeRect(M - 8, M - 8, plotSize + 16, plotSize + 16);
+
+        // ── Escala gráfica (barras alternadas de 50 m) ──
+        const sbX = M, sbY = mapSize - 34, segW = 50 * scale;
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        for (let i = 0; i < 4; i++) {
+            ctx.fillStyle = i % 2 === 0 ? '#1e293b' : '#ffffff';
+            ctx.fillRect(sbX + i * segW, sbY, segW, 8);
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 0.75;
+            ctx.strokeRect(sbX + i * segW, sbY, segW, 8);
+            ctx.fillStyle = '#1e293b';
+            ctx.fillText(String(i * 50), sbX + i * segW, sbY + 20);
+        }
+        ctx.fillText('200 m', sbX + 4 * segW, sbY + 20);
         ctx.textAlign = 'left';
-        const barX = 20, barY = mapSize - 40, barW = 200 * scale;
-        ctx.fillRect(barX, barY, barW, 6);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(barX, barY, barW, 6);
-        ctx.fillText('0', barX, barY + 18);
-        ctx.fillText('200m', barX + barW - 20, barY + 18);
-        ctx.fillText('Escala gráfica - 1km²', barX, barY - 6);
+        ctx.fillText('Barra de escala en metros - Cuadricula cada 100 m', sbX, sbY - 8);
 
-        // Norte
-        ctx.fillStyle = '#ef4444';
-        ctx.font = 'bold 16px monospace';
-        ctx.textAlign = 'right';
-        ctx.fillText('N ^', mapSize - 20, 30);
+        // ── Flecha Norte ──
+        const nx = mapSize - 40, ny = 46;
+        ctx.fillStyle = '#dc2626';
+        ctx.beginPath();
+        ctx.moveTo(nx, ny - 18); ctx.lineTo(nx - 8, ny + 8); ctx.lineTo(nx, ny + 2); ctx.lineTo(nx + 8, ny + 8);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('N', nx, ny + 24);
 
-        // Título
-        ctx.fillStyle = '#38bdf8';
-        ctx.font = 'bold 16px monospace';
+        // ── Cartela superior (titulo) ──
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(M, 10, plotSize, 26);
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 13px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('PLANO GIS - GEOWALKER - AREA DE ESTUDIO 1 km2', mapSize / 2, 27);
+        ctx.font = '9px monospace';
+        ctx.fillStyle = '#475569';
+        ctx.fillText('Centro: ' + this.originLat.toFixed(5) + ', ' + this.originLon.toFixed(5) + ' - Proyeccion metrica local - ' + new Date().toISOString().slice(0, 10), mapSize / 2, M - 14);
+
+        // ── Leyenda (esquina inferior derecha) ──
+        const lgX = mapSize - 196, lgY = mapSize - 168, lgW = 168, lgH = 138;
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillRect(lgX, lgY, lgW, lgH);
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1; ctx.strokeRect(lgX, lgY, lgW, lgH);
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 10px monospace';
         ctx.textAlign = 'left';
-        ctx.fillText('PLANO GIS - GeoWalker 1km²', 20, 30);
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '10px monospace';
-        ctx.fillText(`Centro: ${this.originLat.toFixed(5)} ${this.originLon.toFixed(5)}`, 20, 48);
+        ctx.fillText('LEYENDA', lgX + 8, lgY + 15);
+        const items = [
+            ['#fef3c7', '#b45309', 'Edificio religioso'],
+            ['#dbeafe', '#1e40af', 'Banco / financiero'],
+            ['#fee2e2', '#b91c1c', 'Restaurante / cafe'],
+            ['#e0e7ff', '#4338ca', 'Educacion / salud'],
+            ['#f5f5f0', '#6b7280', 'Edificio generico'],
+            ['#bbf7d0', '#15803d', 'Parque / zona verde'],
+            ['#bfdbfe', '#3b82f6', 'Agua'],
+            ['#ffffff', '#475569', 'Via urbana'],
+            ['#dc2626', '#dc2626', 'Punto de origen'],
+        ];
+        items.forEach((it, i) => {
+            const y = lgY + 28 + i * 12;
+            ctx.fillStyle = it[0];
+            ctx.fillRect(lgX + 8, y - 7, 12, 9);
+            ctx.strokeStyle = it[1]; ctx.lineWidth = 1;
+            ctx.strokeRect(lgX + 8, y - 7, 12, 9);
+            ctx.fillStyle = '#1e293b';
+            ctx.font = '8.5px monospace';
+            ctx.fillText(it[2], lgX + 26, y + 1);
+        });
 
         return canvas.toDataURL('image/png');
     }
