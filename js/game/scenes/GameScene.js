@@ -16,6 +16,8 @@ export class GameScene extends Phaser.Scene {
         this.compassNeedle = null;
         this.tooltipText = null;
         this.totalDistanceMeters = 0;
+        this.copyBtn = null;
+        this.downloadBtn = null;
     }
 
     init(data) {
@@ -303,7 +305,7 @@ export class GameScene extends Phaser.Scene {
         // Peatones usan TODAS las vías (roadsNetwork incluye peatonales, footway, path, etc.)
         if (this.roadsNetwork.length === 0) return;
 
-        for (let i = 0; i < 560; i++) {
+        for (let i = 0; i < 50; i++) {
             const randomRoad = this.roadsNetwork[Math.floor(Math.random() * this.roadsNetwork.length)];
             if (!randomRoad || randomRoad.length === 0) continue;
             
@@ -349,7 +351,7 @@ export class GameScene extends Phaser.Scene {
 
     createHUD() {
         // Cuadro de telemetría HUD
-        const hudBg = this.add.rectangle(15, 15, 320, 150, 0x0f172a, 0.85);
+        const hudBg = this.add.rectangle(15, 15, 320, 180, 0x0f172a, 0.85);
         hudBg.setOrigin(0, 0);
         hudBg.setScrollFactor(0);
         hudBg.setStrokeStyle(1, 0x334155);
@@ -361,6 +363,34 @@ export class GameScene extends Phaser.Scene {
             lineSpacing: 3
         });
         this.hudText.setScrollFactor(0);
+
+        // Botón "Copiar Coordenadas"
+        this.copyBtn = this.add.text(25, 155, '📋 COPIAR COORDENADAS', {
+            fontFamily: 'monospace',
+            fontSize: '10px',
+            fill: '#22d3ee',
+            backgroundColor: '#0f172a',
+            padding: { x: 8, y: 4 }
+        });
+        this.copyBtn.setScrollFactor(0);
+        this.copyBtn.setInteractive({ useHandCursor: true });
+        this.copyBtn.on('pointerover', () => this.copyBtn.setStyle({ fill: '#67e8f9', backgroundColor: '#1e293b' }));
+        this.copyBtn.on('pointerout', () => this.copyBtn.setStyle({ fill: '#22d3ee', backgroundColor: '#0f172a' }));
+        this.copyBtn.on('pointerdown', () => this.copyCoordinates());
+
+        // Botón "Descargar Plano PDF"
+        this.downloadBtn = this.add.text(180, 155, '📄 DESCARGAR PLANO PDF', {
+            fontFamily: 'monospace',
+            fontSize: '10px',
+            fill: '#34d399',
+            backgroundColor: '#0f172a',
+            padding: { x: 8, y: 4 }
+        });
+        this.downloadBtn.setScrollFactor(0);
+        this.downloadBtn.setInteractive({ useHandCursor: true });
+        this.downloadBtn.on('pointerover', () => this.downloadBtn.setStyle({ fill: '#6ee7b7', backgroundColor: '#1e293b' }));
+        this.downloadBtn.on('pointerout', () => this.downloadBtn.setStyle({ fill: '#34d399', backgroundColor: '#0f172a' }));
+        this.downloadBtn.on('pointerdown', () => this.downloadAreaPDF());
 
         // Brújula circular
         const compassX = this.scale.width - 70;
@@ -488,5 +518,242 @@ export class GameScene extends Phaser.Scene {
             `DISTANCIA: ${Math.round(this.totalDistanceMeters)} metros`,
             `AGENTES:   ${this.npcs.length} activos`
         ]);
+    }
+    
+    async copyCoordinates() {
+        if (!this.player) return;
+
+        const isoX = this.player.x - this.scale.width / 2;
+        const isoY = this.player.y - this.scale.height / 2;
+        const px = isoX / 2 + isoY;
+        const py = isoY - isoX / 2;
+
+        const metersX = px / 4;
+        const metersY = -py / 4;
+
+        const dLat = metersY / 6378137;
+        const dLon = metersX / (6378137 * Math.cos(this.originLat * Math.PI / 180));
+
+        const currentLat = this.originLat + (dLat * (180 / Math.PI));
+        const currentLon = this.originLon + (dLon * (180 / Math.PI));
+        const utm = computeUTM(currentLat, currentLon);
+        const latDMS = decimalToDMS(currentLat, true);
+        const lonDMS = decimalToDMS(currentLon, false);
+
+        const textToCopy = [
+            `=== GeoWalker - Coordenadas Actuales ===`,
+            `Latitud/Longitud: ${currentLat.toFixed(6)}°, ${currentLon.toFixed(6)}°`,
+            `DMS: ${latDMS}, ${lonDMS}`,
+            `UTM Zone: ${utm.zone}`,
+            `Easting: ${utm.easting} mE`,
+            `Northing: ${utm.northing} mN`,
+            `Distancia recorrida: ${Math.round(this.totalDistanceMeters)} m`,
+            `Área de simulación: 1km² (500m radio)`,
+            `Origen: ${this.originLat.toFixed(6)}°, ${this.originLon.toFixed(6)}°`,
+            `Fecha: ${new Date().toLocaleString()}`
+        ].join('\n');
+
+        try {
+            await navigator.clipboard.writeText(textToCopy);
+            
+            const originalText = this.copyBtn.text;
+            this.copyBtn.setText('✅ COPIADO');
+            this.copyBtn.setStyle({ fill: '#34d399' });
+            
+            setTimeout(() => {
+                this.copyBtn.setText(originalText);
+                this.copyBtn.setStyle({ fill: '#22d3ee' });
+            }, 2000);
+        } catch (err) {
+            console.error('Error al copiar:', err);
+            console.log(textToCopy);
+            alert('No se pudo copiar automáticamente. Revisa la consola (F12) para ver las coordenadas.');
+        }
+    }
+
+    downloadAreaPDF() {
+        if (!this.player || !this.osmData) return;
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        doc.setFont('helvetica');
+        doc.setFillColor(15, 23, 42);
+        doc.rect(0, 0, 297, 210, 'F');
+        
+        doc.setTextColor(56, 189, 248);
+        doc.setFontSize(24);
+        doc.setFont('helvetica', 'bold');
+        doc.text('GeoWalker - Plano de Área SIM', 20, 30);
+        
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(203, 213, 225);
+        doc.text('Simulador Web GIS 2.5D - Datos OpenStreetMap', 20, 40);
+        
+        doc.setDrawColor(56, 189, 248);
+        doc.setLineWidth(0.5);
+        doc.line(20, 45, 277, 45);
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text('INFORMACIÓN DEL ÁREA DE SIMULACIÓN', 20, 58);
+        
+        doc.setFont('helvetica', 'normal');
+        const info = [
+            `Fecha de generación: ${new Date().toLocaleString()}`,
+            `Centro del área (Origen): ${this.originLat.toFixed(6)}°, ${this.originLon.toFixed(6)}°`,
+            `Área total: 1 km² (radio 500m)`,
+            `Límites: ±500m Norte/Sur/Este/Oeste desde el origen`,
+        ];
+        
+        info.forEach((line, i) => {
+            doc.text(line, 20, 68 + i * 7);
+        });
+        
+        // Estadísticas OSM
+        const stats = { buildings: 0, roads: 0, parks: 0, water: 0, pois: 0, trees: 0 };
+        if (this.osmData && this.osmData.elements) {
+            this.osmData.elements.forEach(el => {
+                if (el.tags) {
+                    if (el.tags.building) stats.buildings++;
+                    else if (el.tags.highway) stats.roads++;
+                    else if (el.tags.leisure === 'park' || el.tags.landuse === 'grass') stats.parks++;
+                    else if (el.tags.waterway || el.tags.natural === 'water') stats.water++;
+                    else if (el.tags.name && !el.tags.highway && !el.tags.building) stats.pois++;
+                    else if (el.tags.natural === 'tree') stats.trees++;
+                }
+            });
+        }
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(56, 189, 248);
+        doc.text('ESTADÍSTICAS DE DATOS OSM', 20, 130);
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(203, 213, 225);
+        const statsLines = [
+            `Edificios: ${stats.buildings}`,
+            `Vías/Carreteras: ${stats.roads}`,
+            `Parques/Áreas verdes: ${stats.parks}`,
+            `Cuerpos de agua: ${stats.water}`,
+            `Puntos de interés (POIs): ${stats.pois}`,
+            `Árboles: ${stats.trees}`,
+            `Total elementos OSM: ${this.osmData.elements.length}`
+        ];
+        
+        statsLines.forEach((line, i) => {
+            doc.text(line, 20, 140 + i * 7);
+        });
+        
+        // Segunda página: Límites geográficos
+        doc.addPage();
+        doc.setFillColor(15, 23, 42);
+        doc.rect(0, 0, 297, 210, 'F');
+        doc.setTextColor(56, 189, 248);
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text('LÍMITES GEOGRÁFICOS DEL ÁREA (1km²)', 20, 25);
+        
+        const metersPerDegreeLat = 111320;
+        const dLatDeg = 500 / metersPerDegreeLat;
+        const dLonDeg = 500 / (metersPerDegreeLat * Math.cos(this.originLat * Math.PI / 180));
+        
+        const bounds = {
+            north: this.originLat + dLatDeg,
+            south: this.originLat - dLatDeg,
+            east: this.originLon + dLonDeg,
+            west: this.originLon - dLonDeg
+        };
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        
+        const boundsInfo = [
+            `Norte (Lat): ${bounds.north.toFixed(6)}°`,
+            `Sur (Lat):  ${bounds.south.toFixed(6)}°`,
+            `Este (Lon):  ${bounds.east.toFixed(6)}°`,
+            `Oeste (Lon): ${bounds.west.toFixed(6)}°`,
+            '',
+            `Centro: ${this.originLat.toFixed(6)}°, ${this.originLon.toFixed(6)}°`,
+            `Radio: 500 metros`,
+            `Superficie: 1,000,000 m² (1 km²)`
+        ];
+        
+        boundsInfo.forEach((line, i) => {
+            doc.text(line, 20, 40 + i * 8);
+        });
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(56, 189, 248);
+        doc.text('ESQUINAS DEL RECTÁNGULO DE SIMULACIÓN', 20, 120);
+        
+        const corners = [
+            { name: 'Noreste (NE)', lat: bounds.north, lon: bounds.east },
+            { name: 'Noroeste (NO)', lat: bounds.north, lon: bounds.west },
+            { name: 'Sureste (SE)', lat: bounds.south, lon: bounds.east },
+            { name: 'Suroeste (SO)', lat: bounds.south, lon: bounds.west }
+        ];
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(203, 213, 225);
+        corners.forEach((corner, i) => {
+            const utmCorner = computeUTM(corner.lat, corner.lon);
+            doc.text(
+                `${corner.name}: ${corner.lat.toFixed(6)}°, ${corner.lon.toFixed(6)}° | UTM: ${utmCorner.easting}mE, ${utmCorner.northing}mN`,
+                20, 132 + i * 8
+            );
+        });
+        
+        // Mini mapa esquemático
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(56, 189, 248);
+        doc.text('REPRESENTACIÓN ESQUEMÁTICA', 150, 40);
+        
+        doc.setFont('courier', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(148, 163, 184);
+        const asciiMap = [
+            '     N (Norte)',
+            '     ▲',
+            '     │',
+            '  ┌──┼──┐',
+            '  │  │  │  ← 500m',
+            'W │  ●  │ E  (● = Origen)',
+            '  │  │  │',
+            '  └──┼──┘',
+            '     │',
+            '     ▼',
+            '     S (Sur)'
+        ];
+        asciiMap.forEach((line, i) => {
+            doc.text(line, 150, 50 + i * 5);
+        });
+        
+        // Pie de página
+        const pageCount = doc.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            doc.setFontSize(7);
+            doc.setTextColor(100, 116, 139);
+            doc.text(
+                `GeoWalker v1.0 - Simulador GIS 2.5D | Datos © OpenStreetMap Contributors | Página ${i} de ${pageCount}`,
+                297 / 2, 205, { align: 'center' }
+            );
+        }
+        
+        // Guardar PDF
+        const fileName = `GeoWalker_Plano_${this.originLat.toFixed(4)}_${this.originLon.toFixed(4)}_${Date.now()}.pdf`;
+        doc.save(fileName);
+        
+        // Feedback visual
+        const originalText = this.downloadBtn.text;
+        this.downloadBtn.setText('✅ PDF GENERADO');
+        this.downloadBtn.setStyle({ fill: '#34d399' });
+        
+        setTimeout(() => {
+            this.downloadBtn.setText(originalText);
+            this.downloadBtn.setStyle({ fill: '#34d399' });
+        }, 2000);
     }
 }
