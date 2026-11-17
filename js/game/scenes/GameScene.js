@@ -44,6 +44,8 @@ export class GameScene extends Phaser.Scene {
         this.renderOSMVectorData();
 
         this.player = new Player(this, width / 2, height / 2);
+        // Si el spawn cae dentro de un edificio, reposicionar en la calle más cercana
+        this.snapPlayerToRoad();
         this.spawnTrafficAgents();
 
         this.cameras.main.startFollow(this.player.sprite, true, 0.08, 0.08);
@@ -270,6 +272,77 @@ export class GameScene extends Phaser.Scene {
                 this.treesGraphics.fillRect(tx - 1, ty - 2, 2, 3);
             }
         });
+    }
+
+    /**
+     * Si el punto de spawn cae dentro de un edificio (colisiona), reposiciona
+     * al jugador en el punto más cercano de la red de calles para que pueda moverse.
+     */
+    snapPlayerToRoad() {
+        if (!this.player) return;
+
+        const playerRadius = 8;
+        const testPoint = { x: this.player.x, y: this.player.y - playerRadius };
+
+        let insideBuilding = false;
+        for (const building of this.buildingsColliders) {
+            if (!building.bounds) continue;
+            if (
+                testPoint.x >= building.bounds.minX - playerRadius &&
+                testPoint.x <= building.bounds.maxX + playerRadius &&
+                testPoint.y >= building.bounds.minY - playerRadius &&
+                testPoint.y <= building.bounds.maxY + playerRadius
+            ) {
+                if (this.player.isPointInPolygon(testPoint, building.points)) {
+                    insideBuilding = true;
+                    break;
+                }
+            }
+        }
+
+        if (!insideBuilding) return;
+
+        // Buscar el punto más cercano sobre los segmentos de la red de calles
+        let best = null;
+        let bestDist = Infinity;
+        for (const road of this.roadsNetwork) {
+            for (let i = 0; i < road.length - 1; i++) {
+                const proj = this.projectPointOnSegment(testPoint, road[i], road[i + 1]);
+                const dx = proj.x - this.player.x;
+                const dy = proj.y - this.player.y;
+                const dist = dx * dx + dy * dy;
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = proj;
+                }
+            }
+        }
+
+        if (best) {
+            this.player.x = best.x;
+            this.player.y = best.y;
+            this.player.sprite.x = best.x;
+            this.player.sprite.y = best.y;
+            this.player.head.x = best.x;
+            this.player.head.y = best.y - 18;
+            console.info('[GeoWalker] Spawn dentro de edificio: reposicionado a la calle más cercana.');
+        } else {
+            console.warn('[GeoWalker] Spawn dentro de edificio y sin calles cercanas para reposicionar.');
+        }
+    }
+
+    /**
+     * Proyección ortogonal de un punto sobre un segmento (con clamp a los extremos).
+     */
+    projectPointOnSegment(p, a, b) {
+        const abx = b.x - a.x;
+        const aby = b.y - a.y;
+        const apx = p.x - a.x;
+        const apy = p.y - a.y;
+        const ab2 = abx * abx + aby * aby;
+        let t = ab2 === 0 ? 0 : (apx * abx + apy * aby) / ab2;
+        t = Math.max(0, Math.min(1, t));
+        return { x: a.x + t * abx, y: a.y + t * aby };
     }
 
     spawnTrafficAgents() {
