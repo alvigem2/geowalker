@@ -2,7 +2,7 @@ import { SpatialGrid } from '../SpatialGrid.js';
 import { getAreaFootprints, getBuildingFootprints, isWaterArea } from '../../gis/buildingFootprints.js';
 import { calculateBBox } from '../../gis/overpass.js';
 import { exportCoordinates, exportLayers, exportNote, exportZip } from '../../gis/exportData.js';
-import { Player } from '../entities/Player.js';
+import { Player } from '../entities/Player.js?v=20261124-2';
 import { TouchJoystick } from '../TouchJoystick.js';
 import { buildingCoversPlayer, drawBoundaryFog, drawGrassDetail, drawRoads, drawRoofDetail, drawTree, drawWallDetail, drawWaterReflections, greenStyle, pedestrianHighways, projectMapSquare, roadStyle } from '../worldStyle.js';
 import { animatePerson, personTexture, prepareActorTextures, vehicleTexture } from '../actorArt.js';

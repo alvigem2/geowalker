@@ -2,6 +2,8 @@ import { isPointInPolygon } from '../../gis/buildingFootprints.js';
 import { isometricToMeters, ProjectionConfig } from '../../gis/projections.js';
 import { animatePerson, personTexture } from '../actorArt.js';
 
+const JOYSTICK_SPEED_FACTOR = 0.5;
+
 /**
  * Entidad del Jugador (Avatar 8 Bits) con Colisiones Robóticas - GeoWalker
  * Gestiona movimiento, límites de 1km2 y colisión dual (Poligonal + Cajas contenedoras).
@@ -38,8 +40,8 @@ export class Player {
         else if (this.cursors?.down.isDown || this.keys?.S.isDown) vy = 1;
 
         if (vx === 0 && vy === 0) {
-            vx = this.joystick?.x ?? 0;
-            vy = this.joystick?.y ?? 0;
+            vx = (this.joystick?.x ?? 0) * JOYSTICK_SPEED_FACTOR;
+            vy = (this.joystick?.y ?? 0) * JOYSTICK_SPEED_FACTOR;
         } else if (vx !== 0 && vy !== 0) {
             vx *= 0.7071;
             vy *= 0.7071;

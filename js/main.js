@@ -1,5 +1,5 @@
 import { calculateBBox, fetchOSMData } from './gis/overpass.js';
-import { GameScene } from './game/scenes/GameScene.js?v=20261124';
+import { GameScene } from './game/scenes/GameScene.js?v=20261124-2';
 
 let selectedLat = -17.7833;
 let selectedLon = -63.1821;
