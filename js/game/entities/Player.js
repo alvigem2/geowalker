@@ -1,120 +1,107 @@
+import { isPointInPolygon } from '../../gis/buildingFootprints.js';
+import { isometricToMeters, ProjectionConfig } from '../../gis/projections.js';
+import { animatePerson, personTexture } from '../actorArt.js';
+
 /**
  * Entidad del Jugador (Avatar 8 Bits) con Colisiones Robóticas - GeoWalker
  * Gestiona movimiento, límites de 1km2 y colisión dual (Poligonal + Cajas contenedoras).
  */
 export class Player {
-    constructor(scene, x, y) {
+    constructor(scene, x, y, joystick) {
         this.scene = scene;
+        this.joystick = joystick;
         this.x = x;
         this.y = y;
         this.speed = 120; // Velocidad en píxeles por segundo
 
         // Controles de teclado (WASD y Flechas)
-        this.cursors = scene.input.keyboard.createCursorKeys();
-        this.keys = scene.input.keyboard.addKeys({
+        this.cursors = scene.input.keyboard?.createCursorKeys();
+        this.keys = scene.input.keyboard?.addKeys({
             W: Phaser.Input.Keyboard.KeyCodes.W,
             A: Phaser.Input.Keyboard.KeyCodes.A,
             S: Phaser.Input.Keyboard.KeyCodes.S,
             D: Phaser.Input.Keyboard.KeyCodes.D
         });
 
-        // Sprite visual de 8 bits
-        this.sprite = scene.add.rectangle(x, y, 16, 24, 0x00ffcc);
-        this.sprite.setOrigin(0.5, 1.0);
-        
-        this.head = scene.add.circle(x, y - 20, 5, 0xffffff);
-        this.head.setOrigin(0.5, 0.5);
+        this.sprite = scene.add.image(x, y, personTexture('player')).setOrigin(0.5, 0.93);
     }
 
-    update(time, delta, buildings, mapWidth, mapHeight) {
+    update(time, delta, buildings) {
         let vx = 0;
         let vy = 0;
         const deltaSec = delta / 1000;
 
-        if (this.cursors.left.isDown || this.keys.A.isDown) vx = -1;
-        else if (this.cursors.right.isDown || this.keys.D.isDown) vx = 1;
+        if (this.cursors?.left.isDown || this.keys?.A.isDown) vx = -1;
+        else if (this.cursors?.right.isDown || this.keys?.D.isDown) vx = 1;
 
-        if (this.cursors.up.isDown || this.keys.W.isDown) vy = -1;
-        else if (this.cursors.down.isDown || this.keys.S.isDown) vy = 1;
+        if (this.cursors?.up.isDown || this.keys?.W.isDown) vy = -1;
+        else if (this.cursors?.down.isDown || this.keys?.S.isDown) vy = 1;
 
-        if (vx !== 0 && vy !== 0) {
+        if (vx === 0 && vy === 0) {
+            vx = this.joystick?.x ?? 0;
+            vy = this.joystick?.y ?? 0;
+        } else if (vx !== 0 && vy !== 0) {
             vx *= 0.7071;
             vy *= 0.7071;
         }
 
-        const nextX = this.x + vx * this.speed * deltaSec;
-        const nextY = this.y + vy * this.speed * deltaSec;
-
-        // Comprobar colisión en X y mover si es válido
-        if (!this.checkCollision(nextX, this.y, buildings, mapWidth, mapHeight)) {
-            this.x = nextX;
-        }
-
-        // Comprobar colisión en Y y mover si es válido
-        if (!this.checkCollision(this.x, nextY, buildings, mapWidth, mapHeight)) {
-            this.y = nextY;
+        const dx = vx * this.speed * deltaSec;
+        const dy = vy * this.speed * deltaSec;
+        const previousX = this.x;
+        const previousY = this.y;
+        const steps = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 2);
+        for (let i = 0; i < steps; i++) {
+            const nextX = this.x + dx / steps;
+            const nextY = this.y + dy / steps;
+            if (dx && !this.checkCollision(nextX, this.y, buildings)) this.x = nextX;
+            if (dy && !this.checkCollision(this.x, nextY, buildings)) this.y = nextY;
         }
 
         // Sincronizar gráficos
         this.sprite.x = this.x;
         this.sprite.y = this.y;
-        this.head.x = this.x;
-        this.head.y = this.y - 18;
+        animatePerson(this.sprite, 'player', this.x - previousX, this.y - previousY, time);
     }
 
     /**
      * Verificación estricta de colisión con doble capa (Polígono exacto + Caja contenedora)
      */
-    checkCollision(x, y, buildings, mapWidth, mapHeight) {
-        // 1. Restricción del Bounding Box global de 1km² (Radio de 500m)
-        const centerX = mapWidth / 2;
-        const centerY = mapHeight / 2;
-        const distX = x - centerX;
-        const distY = y - centerY;
-        const metersFromCenter = Math.sqrt(distX * distX + distY * distY) / 4;
-        
-        if (metersFromCenter > 500) {
-            return true; // Límite del mundo superado
+    checkCollision(x, y, buildings) {
+        const origin = this.scene.worldOrigin;
+        const meters = isometricToMeters(x - origin.x, y - origin.y);
+        const limit = ProjectionConfig.AREA_HALF_SIZE_METERS;
+        if (Math.abs(meters.x) > limit || Math.abs(meters.y) > limit) {
+            return true;
         }
 
         // 2. Colisión contra edificios de OSM
         const playerRadius = 8; // Radio de colisión corporal del avatar
         const testPoint = { x, y: y - playerRadius };
 
-        for (const building of buildings) {
-            // Capa A: Comprobación rápida por caja contenedora (Bounding Box del edificio)
-            if (building.bounds) {
-                if (
-                    testPoint.x >= building.bounds.minX - playerRadius &&
-                    testPoint.x <= building.bounds.maxX + playerRadius &&
-                    testPoint.y >= building.bounds.minY - playerRadius &&
-                    testPoint.y <= building.bounds.maxY + playerRadius
-                ) {
-                    // Capa B: Si está dentro de la caja, comprobamos el polígono exacto (Ray-Casting)
-                    if (this.isPointInPolygon(testPoint, building.points)) {
-                        return true; // Colisión confirmada
-                    }
-                }
-            }
+        const nearbyBuildings = buildings === this.scene.buildingsColliders
+            ? this.scene.buildingGrid?.at(x, y) ?? buildings
+            : buildings;
+        for (const building of nearbyBuildings) {
+            if (this.hitsBuilding(testPoint, building, playerRadius)) return true;
         }
-
-        return false;
+        const feet = { x, y };
+        const water = this.scene.waterGrid?.at(x, y) ?? this.scene.waterColliders;
+        const trees = this.scene.treeGrid?.at(x, y) ?? this.scene.treeColliders;
+        return water.some(area => this.hitsBuilding(feet, area, 0)) ||
+            trees.some(tree => (x - tree.x) ** 2 + (y - tree.y) ** 2 <= tree.radius ** 2);
     }
 
-    /**
-     * Algoritmo Ray-Casting para verificar si un punto está dentro de un polígono
-     */
+    hitsBuilding(point, building, radius) {
+        const bounds = building.bounds;
+        return bounds &&
+            point.x >= bounds.minX - radius && point.x <= bounds.maxX + radius &&
+            point.y >= bounds.minY - radius && point.y <= bounds.maxY + radius &&
+            this.isPointInPolygon(point, building.points) &&
+            !building.holes?.some(hole => this.isPointInPolygon(point, hole));
+    }
+
     isPointInPolygon(point, polygon) {
-        let inside = false;
-        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-            let xi = polygon[i].x, yi = polygon[i].y;
-            let xj = polygon[j].x, yj = polygon[j].y;
-            
-            let intersect = ((yi > point.y) !== (yj > point.y)) &&
-                (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
-            if (intersect) inside = !inside;
-        }
-        return inside;
+        return isPointInPolygon(point, polygon);
     }
 
     getPosition() {

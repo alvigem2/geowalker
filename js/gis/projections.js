@@ -4,6 +4,7 @@
  */
 
 export const ProjectionConfig = {
+    AREA_HALF_SIZE_METERS: 500,
     SCALE: 4,               // 1 metro real = 4 píxeles en el canvas
     EARTH_RADIUS: 6378137,  // Radio de la Tierra en metros (WGS84)
 };
@@ -55,6 +56,13 @@ export function toIsometric(x, y) {
     };
 }
 
+export function isometricToMeters(isoX, isoY) {
+    return {
+        x: (isoY + isoX / 2) / ProjectionConfig.SCALE,
+        y: (isoX / 2 - isoY) / ProjectionConfig.SCALE
+    };
+}
+
 /**
  * Cálculo aproximado de la Zona UTM y coordenadas UTM (Easting, Northing) para el HUD.
  * @param {number} lat 
@@ -91,11 +99,10 @@ export function computeUTM(lat, lon) {
  * @returns {string} Coordenada formateada en DMS (ej. 17°47'01.5"S)
  */
 export function decimalToDMS(decimal, isLat) {
-    const absolute = Math.abs(decimal);
-    const degrees = Math.floor(absolute);
-    const minutesNotTruncated = (absolute - degrees) * 60;
-    const minutes = Math.floor(minutesNotTruncated);
-    const seconds = ((minutesNotTruncated - minutes) * 60).toFixed(1);
+    const tenths = Math.round(Math.abs(decimal) * 36000);
+    const degrees = Math.floor(tenths / 36000);
+    const minutes = Math.floor(tenths / 600) % 60;
+    const seconds = ((tenths % 600) / 10).toFixed(1).padStart(4, '0');
 
     let direction = "";
     if (isLat) {
@@ -104,5 +111,5 @@ export function decimalToDMS(decimal, isLat) {
         direction = decimal >= 0 ? "E" : "O";
     }
 
-    return `${degrees}°${minutes}'${seconds}"${direction}`;
+    return `${degrees}°${String(minutes).padStart(2, '0')}'${seconds}"${direction}`;
 }

@@ -1,5 +1,5 @@
-import { fetchOSMData } from './gis/overpass.js';
-import { GameScene } from './game/scenes/GameScene.js?v=20261116';
+import { calculateBBox, fetchOSMData } from './gis/overpass.js';
+import { GameScene } from './game/scenes/GameScene.js?v=20261124';
 
 let selectedLat = -17.7833;
 let selectedLon = -63.1821;
@@ -14,14 +14,17 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.innerText = 'Descargando vectores OSM (1km²)...';
         btn.disabled = true;
 
+        const originLat = selectedLat;
+        const originLon = selectedLon;
         try {
-            const osmData = await fetchOSMData(selectedLat, selectedLon);
+            const osmData = await fetchOSMData(originLat, originLon);
             document.getElementById('selector-container').classList.add('hidden');
 
+            const app = document.getElementById('app');
             const config = {
                 type: Phaser.AUTO,
-                width: window.innerWidth,
-                height: window.innerHeight,
+                width: app.clientWidth,
+                height: app.clientHeight,
                 parent: 'app',
                 backgroundColor: '#0f172a',
                 pixelArt: true,  // ← AGREGAR ESTA LÍNEA
@@ -36,8 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             game.scene.start('GameScene', {
                 osmData: osmData,
-                originLat: selectedLat,
-                originLon: selectedLon
+                originLat,
+                originLon
             });
 
         } catch (error) {
@@ -63,16 +66,8 @@ function initLeafletSelector() {
     let simAreaRectangle = null;
 
     function updateSimArea() {
-        // Calcular las coordenadas del rectángulo de 1km² (500m a cada lado)
-        // 1 grado de latitud ≈ 111,320 metros
-        const metersPerDegreeLat = 111320;
-        const dLat = 500 / metersPerDegreeLat;
-        const dLon = 500 / (metersPerDegreeLat * Math.cos(selectedLat * Math.PI / 180));
-
-        const bounds = [
-            [selectedLat - dLat, selectedLon - dLon], // Esquina suroeste
-            [selectedLat + dLat, selectedLon + dLon]  // Esquina noreste
-        ];
+        const { south, west, north, east } = calculateBBox(selectedLat, selectedLon);
+        const bounds = [[south, west], [north, east]];
 
         if (simAreaRectangle) {
             simAreaRectangle.setBounds(bounds);
@@ -92,8 +87,7 @@ function initLeafletSelector() {
             areaInfo.innerHTML = `
                 <strong>Área de Simulación (1km²)</strong><br>
                 Centro: ${selectedLat.toFixed(5)}°, ${selectedLon.toFixed(5)}°<br>
-                Radio: 500m desde el centro<br>
-                Límite: ±500m en Lat/Lon
+                Límite: ±500 m al norte, sur, este y oeste
             `;
         }
     }
@@ -145,7 +139,7 @@ function initLeafletSelector() {
                     areaInfo.innerHTML = `
                         <strong>📍 ${result.display_name}</strong><br>
                         Lat: ${selectedLat.toFixed(5)}° | Lon: ${selectedLon.toFixed(5)}°<br>
-                        Área de simulación: 1km² (500m radio)
+                        Área de simulación: 1km² (±500 m por eje)
                     `;
                 }
             } else {

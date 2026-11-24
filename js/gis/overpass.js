@@ -1,21 +1,19 @@
+import { ProjectionConfig } from './projections.js';
+
 /**
  * Módulo de Cliente Overpass API - GeoWalker
  * Extrae vectores geográficos (calles, edificios, ríos, POIs) de OpenStreetMap bajo demanda.
  */
 
 /**
- * Calcula un Bounding Box (BBOX) de aproximadamente 1km2 (radio de 500m) alrededor de un punto lat/lon.
+ * Calcula un Bounding Box (BBOX) de aproximadamente 1 km² (±500 m por eje) alrededor de un punto lat/lon.
  * @param {number} lat - Latitud central
  * @param {number} lon - Longitud central
  * @returns {Object} { south, west, north, east }
  */
 export function calculateBBox(lat, lon) {
-    // 1 grado de latitud equivale aprox a 111,000 metros. 500m = ~0.0045 grados.
-    const offsetLat = 500 / 111000;
-    
-    // 1 grado de longitud depende de la latitud.
-    const latRad = lat * (Math.PI / 180);
-    const offsetLon = 500 / (111000 * Math.cos(latRad));
+    const offsetLat = ProjectionConfig.AREA_HALF_SIZE_METERS / ProjectionConfig.EARTH_RADIUS * 180 / Math.PI;
+    const offsetLon = offsetLat / Math.cos(lat * Math.PI / 180);
 
     return {
         south: lat - offsetLat,
@@ -41,15 +39,30 @@ export async function fetchOSMData(lat, lon) {
         (
           way["highway"](${bboxStr});
           way["building"](${bboxStr});
-          relation["building"](${bboxStr});
+          relation["type"="multipolygon"]["building"](${bboxStr});
           way["barrier"](${bboxStr});
           way["waterway"](${bboxStr});
+          way["leisure"~"^(park|garden)$"](${bboxStr});
+          relation["type"="multipolygon"]["leisure"~"^(park|garden)$"](${bboxStr});
+          way["landuse"~"^(grass|meadow|recreation_ground|village_green|forest)$"](${bboxStr});
+          relation["type"="multipolygon"]["landuse"~"^(grass|meadow|recreation_ground|village_green|forest)$"](${bboxStr});
+          way["natural"~"^(grassland|wood|scrub)$"](${bboxStr});
+          relation["type"="multipolygon"]["natural"~"^(grassland|wood|scrub)$"](${bboxStr});
+          way["natural"="water"](${bboxStr});
+          relation["type"="multipolygon"]["natural"="water"](${bboxStr});
+          way["landuse"="reservoir"](${bboxStr});
+          relation["type"="multipolygon"]["landuse"="reservoir"](${bboxStr});
+          way["leisure"="swimming_pool"](${bboxStr});
+          relation["type"="multipolygon"]["leisure"="swimming_pool"](${bboxStr});
+          relation["type"="multipolygon"]["waterway"="riverbank"](${bboxStr});
+          relation["type"="multipolygon"]["waterway"]["area"="yes"](${bboxStr});
+          node["natural"="tree"](${bboxStr});
           node["amenity"](${bboxStr});
+          node["shop"](${bboxStr});
           way["amenity"](${bboxStr});
         );
-        out body;
-        >;
-        out skel qt;
+        (._; >>;);
+        out body qt;
     `;
 
     // Endpoints públicos oficiales de Overpass API (con respaldo si uno falla)

@@ -13,8 +13,113 @@ body, html {
 }
 
 #app {
+    position: absolute;
+    inset: env(safe-area-inset-top) env(safe-area-inset-right)
+        env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overflow: hidden;
+}
+
+.touch-joystick {
+    display: none;
+    position: absolute;
+    z-index: 2;
+    left: 16px;
+    bottom: 16px;
+    width: clamp(104px, 19vmin, 144px);
+    aspect-ratio: 1;
+    place-items: center;
+    border: 2px solid #7891ad;
+    border-radius: 50%;
+    background: rgb(15 31 50 / 78%);
+    touch-action: none;
+    user-select: none;
+    cursor: grab;
+}
+
+.touch-joystick-knob {
+    width: 36%;
+    aspect-ratio: 1;
+    border: 2px solid #bae6fd;
+    border-radius: 50%;
+    background: #38799b;
+    pointer-events: none;
+}
+
+@media (any-pointer: coarse) {
+    .touch-joystick { display: grid; }
+}
+
+@media (any-pointer: coarse) and (orientation: landscape) {
+    .touch-joystick {
+        left: auto;
+        right: 16px;
+    }
+}
+
+.compact-hud .geo-export-trigger {
+    left: 16px;
+    top: 188px;
+    min-height: 44px;
+}
+
+.geo-export-trigger {
+    position: absolute;
+    z-index: 1;
+    top: 181px;
+    left: 25px;
+    padding: 5px 8px;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    background: #0f172a;
+    color: #93c5fd;
+    font: 11px monospace;
+    cursor: pointer;
+}
+
+.geo-export-trigger:hover {
+    background: #1e293b;
+}
+
+.geo-export-dialog {
+    margin: auto;
+    width: min(420px, calc(100vw - 28px));
+    max-height: calc(100dvh - 28px);
+    overflow: auto;
+    padding: 20px;
+    border: 1px solid #475569;
+    border-radius: 12px;
+    background: #111e30;
+    color: #e2e8f0;
+}
+
+.geo-export-dialog::backdrop {
+    background: rgb(2 6 23 / 70%);
+}
+
+.geo-export-dialog p {
+    margin: 8px 0 12px;
+    font-size: 14px;
+}
+
+.geo-export-dialog > button,
+.geo-export-dialog form button {
+    padding: 9px 12px;
+    border: 1px solid #475569;
+    border-radius: 7px;
+    background: #1e3a52;
+    color: inherit;
+    cursor: pointer;
+}
+
+.geo-export-dialog > button {
+    display: block;
     width: 100%;
-    height: 100%;
+    margin-bottom: 7px;
+    text-align: left;
+}
+
+.geo-export-dialog button:hover {
+    background: #27465f;
 }
 
 /* Estilos para la pantalla inicial de selección con Leaflet */
@@ -28,11 +133,14 @@ body, html {
     flex-direction: column;
     z-index: 1000;
     background: #090d16;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+        env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 #map {
     flex: 1;
     width: 100%;
+    min-height: 0;
 }
 
 .selector-header {
@@ -128,4 +236,50 @@ body, html {
 
 .search-container button:hover {
     background: #0369a1;
+}
+
+@media (max-width: 1050px), (any-pointer: coarse) {
+    .selector-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px 12px;
+        padding: 10px 12px;
+    }
+
+    .selector-header > div:first-child { grid-column: 1 / -1; }
+    .selector-header h1 { font-size: clamp(16px, 3vw, 20px); }
+
+    .selector-header button,
+    .search-container input {
+        min-height: 44px;
+        padding: 8px 12px;
+    }
+
+    .search-container { margin: 0; }
+
+    .search-container input,
+    .search-container input:focus {
+        width: 100%;
+        min-width: 0;
+        font-size: 16px;
+    }
+
+    .area-info-panel {
+        position: static;
+        padding: 5px 12px;
+        border-radius: 0;
+        white-space: normal;
+    }
+
+    .geo-export-dialog > button,
+    .geo-export-dialog form button { min-height: 44px; }
+}
+
+@media (max-width: 540px) {
+    .selector-header { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+    .selector-header > div:first-child p { display: none; }
+    .touch-joystick { width: 96px; }
 }
